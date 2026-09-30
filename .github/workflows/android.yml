@@ -73,14 +73,23 @@ jobs:
 
       - name: Setup Android signing
         run: |
-          printf 'keyAlias=%s\n' '${{ secrets.ANDROID_KEY_ALIAS }}' > src-tauri/gen/android/keystore.properties
-          printf 'keyPassword=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
-          printf 'storeFile=%s\n' "$RUNNER_TEMP/semios-release.keystore" >> src-tauri/gen/android/keystore.properties
-          printf 'storePassword=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
           echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > "$RUNNER_TEMP/semios-release.keystore"
+          printf 'keyAlias=%s\n' '${{ secrets.ANDROID_KEY_ALIAS }}' > src-tauri/gen/android/keystore.properties
+          printf 'password=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
+          printf 'storeFile=%s\n' "$RUNNER_TEMP/semios-release.keystore" >> src-tauri/gen/android/keystore.properties
+
+      - name: Wire signing into Gradle
+        run: node scripts/patch-android-signing.mjs src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build APK
         run: npm run tauri android build -- --apk
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          apksigner_path="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$apksigner_path" verify --verbose --print-certs \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v7

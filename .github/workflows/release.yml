@@ -63,19 +63,31 @@ jobs:
 
       - name: Setup Android signing
         run: |
-          printf 'keyAlias=%s\n' '${{ secrets.ANDROID_KEY_ALIAS }}' > src-tauri/gen/android/keystore.properties
-          printf 'keyPassword=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
-          printf 'storeFile=%s\n' "$RUNNER_TEMP/semios-release.keystore" >> src-tauri/gen/android/keystore.properties
-          printf 'storePassword=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
           echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > "$RUNNER_TEMP/semios-release.keystore"
+          printf 'keyAlias=%s\n' '${{ secrets.ANDROID_KEY_ALIAS }}' > src-tauri/gen/android/keystore.properties
+          printf 'password=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
+          printf 'storeFile=%s\n' "$RUNNER_TEMP/semios-release.keystore" >> src-tauri/gen/android/keystore.properties
+
+      - name: Wire signing into Gradle
+        run: node scripts/patch-android-signing.mjs src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build APK
         run: npm run tauri android build -- --apk
 
-      - name: Collect APK
+      - name: Collect and verify APK
         run: |
+          set -euo pipefail
+          built=(src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk)
+          if [ "${#built[@]}" -ne 1 ]; then
+            echo "expected exactly one release APK, found: ${#built[@]}" >&2
+            exit 1
+          fi
+          echo "built: ${built[0]}"
+          apksigner_path="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$apksigner_path" verify --verbose --print-certs "${built[0]}"
           mkdir -p dist
-          find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec cp {} dist/semios-android.apk \;
+          cp "${built[0]}" dist/semios-android.apk
+          ls -l dist/semios-android.apk
 
       - uses: actions/upload-artifact@v7
         with:
@@ -129,6 +141,10 @@ jobs:
     needs: [android, windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v7
         with:
           path: dist
