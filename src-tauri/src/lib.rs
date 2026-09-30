@@ -319,8 +319,35 @@ fn smoke_step<R: Runtime>(app: &AppHandle<R>, url: &str) {
         2 if url == target => {
             smoke.stage = 3;
             logging::write("INFO", "smoke complete: remote page loaded and reloaded");
+            probe_remote_page(app);
         }
         _ => {}
+    }
+}
+
+/// Asks the loaded site what it can actually see, and sends the answer back over
+/// the bridge. The injected script cannot report in from a foreign origin, so
+/// this is the only way to learn whether the toolbar is on screen and whether
+/// the page underneath it is still clickable, which is the whole point of the
+/// inset. Desktop only, because it needs eval.
+#[cfg(desktop)]
+fn probe_remote_page<R: Runtime>(app: &AppHandle<R>) {
+    const PROBE: &str = r#"(function(){
+var host=document.getElementById('semios-overlay');
+var bar=host&&host.shadowRoot?host.shadowRoot.querySelector('.bar'):null;
+var barPx=bar?Math.round(bar.getBoundingClientRect().height):0;
+var inset=Math.round(parseFloat(getComputedStyle(document.documentElement).paddingTop)||0);
+var hit=document.elementFromPoint(Math.round(innerWidth/2),barPx+16);
+var blocked=!!(hit&&hit.closest&&hit.closest('#semios-overlay'));
+var out='bar='+(bar?'yes':'no')+';barPx='+barPx+';inset='+inset+';blocked='+(blocked?'yes':'no')+';hit='+(hit?hit.tagName:'none');
+location.href='semios://probe/'+encodeURIComponent(out);})()"#;
+    eval(app, PROBE);
+}
+
+#[cfg(mobile)]
+fn probe_remote_page<R: Runtime>(_app: &AppHandle<R>) {
+    logging::write("WARN", "smoke probe skipped on mobile: no eval available");
+}
     }
 }
 
@@ -365,6 +392,9 @@ fn bridge<R: Runtime>(app: &AppHandle<R>, url: &Url) {
             if let Some(target) = arg {
                 let _ = app.opener().open_url(target, None::<String>);
             }
+        }
+        "probe" => {
+            logging::write("INFO", &format!("smoke probe {}", arg.unwrap_or("-")));
         }
         _ => {}
     }

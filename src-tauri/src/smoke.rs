@@ -31,16 +31,38 @@ fn read_trigger() -> Option<String> {
 /// harness cannot hand us a file inside the app sandbox. App-specific external
 /// storage needs no runtime permission and is still writable by adb, which
 /// makes it the one channel that works without pulling in another plugin.
+///
+/// Every candidate is logged: this path differs across Android versions, and a
+/// trigger that silently fails looks exactly like a navigation test that was
+/// never wired up.
 #[cfg(mobile)]
 fn read_trigger() -> Option<String> {
+    use std::path::PathBuf;
+
     const PACKAGE: &str = "app.semios.browser";
-    std::env::var("EXTERNAL_STORAGE").ok().and_then(|root| {
-        std::fs::read_to_string(
-            std::path::PathBuf::from(root)
-                .join("Android/data")
-                .join(PACKAGE)
-                .join("files/semios-smoke.txt"),
-        )
-        .ok()
-    })
+    const NAME: &str = "semios-smoke.txt";
+
+    let mut roots: Vec<PathBuf> = Vec::new();
+    match std::env::var("EXTERNAL_STORAGE") {
+        Ok(root) => roots.push(PathBuf::from(root)),
+        Err(_) => logging::write("WARN", "smoke trigger: EXTERNAL_STORAGE is not set"),
+    }
+    roots.push(PathBuf::from("/sdcard"));
+    roots.push(PathBuf::from("/storage/emulated/0"));
+
+    for root in roots {
+        let path = root.join("Android/data").join(PACKAGE).join("files").join(NAME);
+        match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                logging::write("INFO", &format!("smoke trigger found {}", path.display()));
+                return Some(text);
+            }
+            Err(error) => logging::write(
+                "WARN",
+                &format!("smoke trigger miss {} ({error})", path.display()),
+            ),
+        }
+    }
+    logging::write("WARN", "smoke trigger not found on any candidate path");
+    None
 }

@@ -94,10 +94,9 @@ fi
 
 # The trigger was armed and read, so the log has to show the whole walk. These
 # are the paths a bare startup never reaches, and the ones that used to abort.
-if ! grep -q 'overlay attached' "$OUT/logcat-full.txt"; then
-  echo "RESULT: toolbar never attached to the remote page" | tee -a "$OUT/result.txt"
-  exit 1
-fi
+# The toolbar cannot report in from a foreign origin and mobile has no eval, so
+# unlike desktop this cannot ask the page what it sees; it proves the remote
+# page survives a load and a reload, and that nothing was drawn blank.
 if ! grep -q 'smoke complete: remote page loaded and reloaded' "$OUT/logcat-full.txt"; then
   echo "RESULT: remote page did not survive a load and a reload" | tee -a "$OUT/result.txt"
   exit 1

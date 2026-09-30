@@ -98,15 +98,23 @@ if ($logText -match 'ERROR|PANIC') { $problems += 'log reported an error' }
 if ($logText -notmatch 'start toolbar mounted') {
   $problems += 'start page never reported a successful mount'
 }
-if ($logText -notmatch 'overlay attached') {
-  $problems += 'toolbar never attached to the remote page'
-}
 if ($logText -notmatch 'smoke complete: remote page loaded and reloaded') {
   $problems += 'remote page did not survive a load and a reload'
+}
+# The page is asked what it can see, and answers over the bridge. This is what
+# catches the toolbar covering the site instead of sitting above it.
+if ($logText -notmatch 'smoke probe bar=yes') {
+  $problems += 'toolbar did not attach to the remote page'
+}
+if ($logText -match 'smoke probe.*blocked=yes') {
+  $problems += 'the toolbar is still swallowing clicks on the page'
+}
+if ($logText -match 'smoke probe.*inset=0;') {
+  $problems += 'the page was not inset below the toolbar'
 }
 if ($problems.Count -gt 0) {
   Write-Host "FAILED: $($problems -join '; ')"
   exit 1
 }
 
-Write-Host 'PASSED: window alive, toolbar mounted, remote page loaded and reloaded'
+Write-Host 'PASSED: remote page loaded, reloaded, toolbar attached, page still clickable'
