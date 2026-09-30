@@ -9,7 +9,11 @@ const bridge = (action: string, arg?: string): void => {
 };
 
 export function createOverlayController(): Controller {
-  let pushed: Snapshot = EMPTY_SNAPSHOT;
+  // Start optimistic. Android cannot receive a push from Rust, so an accurate
+  // "disabled" state is never going to arrive there, and a permanently
+  // disabled back button is worse than one that is merely a no-op. A desktop
+  // push overwrites these with the real values as soon as it arrives.
+  let pushed: Snapshot = { ...EMPTY_SNAPSHOT, canGoBack: true, canGoForward: true };
   const receivers = new Set<(snapshot: Snapshot) => void>();
 
   const publish = (loading: boolean): void => {

@@ -149,10 +149,23 @@ fn webview<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
         .map(|window| window.as_ref().clone())
 }
 
+/// On desktop the webview accepts scripts from any thread. On Android, wry
+/// drops the receiver end of its main pipe once the first page commits, so
+/// every later `eval` aborts the process with `SendError(..)` regardless of the
+/// calling thread. Mobile therefore never evaluates: the toolbar keeps its own
+/// state in the page and is driven from there instead.
+#[cfg(desktop)]
 fn eval<R: Runtime>(app: &AppHandle<R>, script: &str) {
     if let Some(webview) = webview(app) {
-        let _ = webview.eval(script);
+        if let Err(error) = webview.eval(script) {
+            logging::write("WARN", &format!("eval failed: {error}"));
+        }
     }
+}
+
+#[cfg(mobile)]
+fn eval<R: Runtime>(_app: &AppHandle<R>, script: &str) {
+    logging::write("WARN", &format!("eval skipped on mobile: {script}"));
 }
 
 fn set_loading<R: Runtime>(app: &AppHandle<R>, loading: bool) {
@@ -195,32 +208,11 @@ fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
 fn publish<R: Runtime>(app: &AppHandle<R>) {
     let state = snapshot(app);
     let _ = app.emit("semios-state", &state);
+    #[cfg(desktop)]
     if let Ok(json) = serde_json::to_string(&state) {
         let script = String::from("window.__semios && window.__semios.update(") + &json + ")";
-        push_to_webview(app, &script);
+        eval(app, &script);
     }
-}
-
-#[cfg(desktop)]
-fn push_to_webview<R: Runtime>(app: &AppHandle<R>, script: &str) {
-    eval(app, script);
-}
-
-// On Android, wry routes webview calls through a main pipe. Page-load
-// callbacks are themselves delivered by that pipe, so calling eval from
-// inside one re-enters a pipe whose receiver is already gone and aborts the
-// process with `SendError(..)`. Leave the callback before touching the webview.
-#[cfg(mobile)]
-fn push_to_webview<R: Runtime>(app: &AppHandle<R>, script: &str) {
-    if webview(app).is_none() {
-        return;
-    }
-    let app = app.clone();
-    let script = script.to_string();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(150));
-        eval(&app, &script);
-    });
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
@@ -240,7 +232,15 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
         "forward" => eval(app, "window.history.forward()"),
         "reload" => {
             set_loading(app, true);
+            #[cfg(desktop)]
             eval(app, "window.location.reload()");
+            // Re-navigating is the only reload available without eval, and it
+            // still has to clear loading if the current URL is unreadable.
+            #[cfg(mobile)]
+            match webview(app).and_then(|webview| webview.url().ok()) {
+                Some(url) => navigate(app, url.as_str()),
+                None => set_loading(app, false),
+            }
         }
         "stop" => {
             set_loading(app, false);
