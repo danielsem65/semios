@@ -11,7 +11,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2021',
-    minify: 'esbuild',
+    minify: 'oxc',
     reportCompressedSize: false,
     emptyOutDir: true,
   },

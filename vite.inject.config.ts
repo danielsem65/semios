@@ -5,7 +5,7 @@ export default defineConfig({
     outDir: 'src-tauri/overlay',
     emptyOutDir: true,
     target: 'es2021',
-    minify: 'esbuild',
+    minify: 'oxc',
     reportCompressedSize: false,
     cssCodeSplit: false,
     lib: {
