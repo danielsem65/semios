@@ -2,6 +2,15 @@ name: Android signing
 description: Decode the release keystore and wire it into the generated Gradle project
 
 inputs:
+  key-base64:
+    description: Base64-encoded release keystore
+    required: true
+  key-password:
+    description: Keystore password
+    required: true
+  key-alias:
+    description: Keystore key alias
+    required: true
   gradle-path:
     description: Path to the generated app/build.gradle.kts
     default: src-tauri/gen/android/app/build.gradle.kts
@@ -11,10 +20,14 @@ runs:
   steps:
     - name: Write keystore.properties
       shell: bash
+      env:
+        KEYSTORE_BASE64: ${{ inputs.key-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.key-password }}
+        KEYSTORE_ALIAS: ${{ inputs.key-alias }}
       run: |
-        echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > "$RUNNER_TEMP/semios-release.keystore"
-        printf 'keyAlias=%s\n' '${{ secrets.ANDROID_KEY_ALIAS }}' > src-tauri/gen/android/keystore.properties
-        printf 'password=%s\n' '${{ secrets.ANDROID_KEY_PASSWORD }}' >> src-tauri/gen/android/keystore.properties
+        echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/semios-release.keystore"
+        printf 'keyAlias=%s\n' "$KEYSTORE_ALIAS" > src-tauri/gen/android/keystore.properties
+        printf 'password=%s\n' "$KEYSTORE_PASSWORD" >> src-tauri/gen/android/keystore.properties
         printf 'storeFile=%s\n' "$RUNNER_TEMP/semios-release.keystore" >> src-tauri/gen/android/keystore.properties
 
     - name: Wire signing into Gradle

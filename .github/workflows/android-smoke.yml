@@ -68,6 +68,10 @@ jobs:
 
       - name: Android signing
         uses: ./.github/actions/android-signing
+        with:
+          key-base64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
 
       - name: Build signed release APK
         run: npm run tauri android build -- --apk
