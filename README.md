@@ -10,9 +10,21 @@ JavaScript framework, no runtime dependency downloads.
 | Platform | State |
 | --- | --- |
 | Windows | Building on every push (NSIS installer) |
-| Android | Building on every push (unsigned APK) |
+| Android | Building on every push (signed APK) |
 | iOS | Planned |
 | macOS | Planned |
+
+## Install
+
+Android (signed, universal APK, works on any device):
+
+- https://github.com/danielsem65/semios/releases/latest/download/semios-android.apk
+
+Windows (NSIS installer):
+
+- https://github.com/danielsem65/semios/releases/latest/download/semios-windows-setup.exe
+
+Android may ask you to allow installs from your browser the first time.
 
 ## Features
 
@@ -74,7 +86,23 @@ npm run tauri android dev
 Push to `main` or open a pull request:
 
 - [Windows](.github/workflows/windows.yml) — NSIS installer
-- [Android](.github/workflows/android.yml) — unsigned APK
+- [Android](.github/workflows/android.yml) — signed APK
+
+Push a `v*` tag to publish a GitHub Release:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Android signing uses three repository secrets: `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`, and `ANDROID_KEY_BASE64` (the base64 of the release
+keystore). The keystore itself is never stored in this repository. Because
+`src-tauri/gen/android` is generated, each workflow writes
+`keystore.properties` and patches the generated
+`app/build.gradle.kts` via [scripts/patch-android-signing.mjs](scripts/patch-android-signing.mjs).
+`apksigner verify` runs on every Android build, so an unsigned APK can never be
+published by accident.
 
 ## License
 
