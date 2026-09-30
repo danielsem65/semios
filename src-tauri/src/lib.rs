@@ -348,8 +348,6 @@ location.href='semios://probe/'+encodeURIComponent(out);})()"#;
 fn probe_remote_page<R: Runtime>(_app: &AppHandle<R>) {
     logging::write("WARN", "smoke probe skipped on mobile: no eval available");
 }
-    }
-}
 
 fn navigate<R: Runtime>(app: &AppHandle<R>, target: &str) {
     let Ok(url) = Url::parse(target) else {
