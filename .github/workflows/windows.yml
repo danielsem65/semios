@@ -52,3 +52,12 @@ jobs:
           name: semios-windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+      - name: Upload lock files
+        uses: actions/upload-artifact@v7
+        with:
+          name: lock-files
+          path: |
+            package-lock.json
+            src-tauri/Cargo.lock
+          if-no-files-found: error
