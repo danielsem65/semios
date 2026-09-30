@@ -74,9 +74,11 @@ pub fn write(level: &str, message: &str) {
         .map(|since| since.as_millis())
         .unwrap_or_default();
     let line = format!("{millis}\t{level}\t{}\n", message.replace('\n', " "));
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = file.write_all(line.as_bytes());
-        let _ = file.flush();
+    if let Some(Some(path)) = LOG_PATH.get() {
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+            let _ = file.write_all(line.as_bytes());
+            let _ = file.flush();
+        }
     }
     // On Android a release-signed app cannot hand its log file to a test
     // harness, so stderr is the only channel that reaches logcat. Mirror
