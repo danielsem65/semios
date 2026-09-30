@@ -87,7 +87,7 @@ pub fn run() {
 
 fn webview<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
     app.get_webview_window(MAIN)
-        .map(|window| window.as_ref().webview().clone())
+        .map(|window| window.as_ref().clone())
 }
 
 fn eval<R: Runtime>(app: &AppHandle<R>, script: &str) {
@@ -109,7 +109,8 @@ fn record<R: Runtime>(app: &AppHandle<R>, url: &Url) {
     if session.history.get(session.index) == Some(&target) {
         return;
     }
-    session.history.truncate(session.index);
+    let index = session.index;
+    session.history.truncate(index);
     session.history.push(target);
     session.index = session.history.len() - 1;
 }
@@ -128,7 +129,7 @@ fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
         loading: session.loading,
         can_go_back: session.index > 0,
         can_go_forward: session.index + 1 < session.history.len(),
-        platform: platform(),
+        platform: platform().to_string(),
     }
 }
 
