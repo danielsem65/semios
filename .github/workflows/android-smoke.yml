@@ -66,8 +66,18 @@ jobs:
       - name: Init Android
         run: npm run tauri android init
 
-      - name: Build debug APK
-        run: npm run tauri android build --debug -- --apk
+      - name: Android signing
+        uses: ./.github/actions/android-signing
+
+      - name: Build signed release APK
+        run: npm run tauri android build -- --apk
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+          apksigner_path="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$apksigner_path" verify --verbose --print-certs \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
 
       - name: Enable KVM
         run: |
