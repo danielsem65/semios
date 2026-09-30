@@ -154,13 +154,33 @@ fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
 
 fn publish<R: Runtime>(app: &AppHandle<R>) {
     let state = snapshot(app);
-    if let Some(webview) = webview(app) {
-        if let Ok(json) = serde_json::to_string(&state) {
-            let script = String::from("window.__semios && window.__semios.update(") + &json + ")";
-            let _ = webview.eval(&script);
-        }
-    }
     let _ = app.emit("semios-state", &state);
+    if let Ok(json) = serde_json::to_string(&state) {
+        let script = String::from("window.__semios && window.__semios.update(") + &json + ")";
+        push_to_webview(app, &script);
+    }
+}
+
+#[cfg(desktop)]
+fn push_to_webview<R: Runtime>(app: &AppHandle<R>, script: &str) {
+    eval(app, script);
+}
+
+// On Android, wry routes webview calls through a main pipe. Page-load
+// callbacks are themselves delivered by that pipe, so calling eval from
+// inside one re-enters a pipe whose receiver is already gone and aborts the
+// process with `SendError(..)`. Leave the callback before touching the webview.
+#[cfg(mobile)]
+fn push_to_webview<R: Runtime>(app: &AppHandle<R>, script: &str) {
+    if webview(app).is_none() {
+        return;
+    }
+    let app = app.clone();
+    let script = script.to_string();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        eval(&app, &script);
+    });
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
