@@ -13,6 +13,8 @@
   --semios-muted: #6b7280;
   --semios-border: rgba(0, 0, 0, 0.1);
   --semios-accent: #2f6df6;
+  --semios-update: #0b7a43;
+  --semios-update-wash: rgba(15, 138, 77, 0.12);
   --semios-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 18px rgba(0, 0, 0, 0.06);
 }
 
@@ -24,6 +26,8 @@
     --semios-muted: #9aa1ab;
     --semios-border: rgba(255, 255, 255, 0.1);
     --semios-accent: #6f9bff;
+    --semios-update: #5ee08a;
+    --semios-update-wash: rgba(94, 224, 138, 0.16);
     --semios-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
   }
 }
@@ -84,6 +88,18 @@
 
 .btn[hidden] {
   display: none;
+}
+
+/* Only ever visible when a newer release exists, so it borrows the action
+   colour rather than the muted one to read as an offer, not as chrome. */
+.btn.update {
+  color: var(--semios-update);
+  background: var(--semios-update-wash);
+}
+
+.btn.update:hover {
+  background: var(--semios-update-wash);
+  filter: brightness(1.35);
 }
 
 .btn svg {

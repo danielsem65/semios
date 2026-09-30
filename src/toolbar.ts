@@ -1,5 +1,5 @@
 import css from './toolbar.css?inline';
-import { EMPTY_SNAPSHOT, type Controller, type Snapshot } from './controller';
+import { EMPTY_SNAPSHOT, EMPTY_UPDATE, type Controller, type Snapshot } from './controller';
 import { displayUrl, isWebUrl } from './url';
 
 const ICON = {
@@ -11,6 +11,7 @@ const ICON = {
   lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.2"/><path d="M8.2 11V8a3.8 3.8 0 0 1 7.6 0v3"/></svg>',
   globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.8 3 2.8 13 0 16-2.8-3-2.8-13 0-16z"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>',
+  update: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10"/><path d="M7.8 10.8 12 15l4.2-4.2"/><path d="M5 19.5h14"/></svg>',
 };
 
 const MARKUP = `
@@ -20,6 +21,7 @@ const MARKUP = `
   <button class="btn" data-act="forward" title="Forward (Alt+Right)" aria-label="Forward">${ICON.forward}</button>
   <button class="btn" data-act="reload" title="Reload (Ctrl+R)" aria-label="Reload">${ICON.reload}</button>
   <button class="btn" data-act="home" title="Home" aria-label="Home">${ICON.home}</button>
+  <button class="btn update" data-act="update" title="Update available" aria-label="Update available" hidden>${ICON.update}</button>
   <form class="field" autocomplete="off">
     <span class="hint">${ICON.lock}</span>
     <input type="text" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Search or enter address" aria-label="Address and search bar" />
@@ -51,6 +53,7 @@ export function mountToolbar(
   const back = pick<HTMLButtonElement>(shell, '[data-act="back"]');
   const forward = pick<HTMLButtonElement>(shell, '[data-act="forward"]');
   const reload = pick<HTMLButtonElement>(shell, '[data-act="reload"]');
+  const update = pick<HTMLButtonElement>(shell, '[data-act="update"]');
   const close = pick<HTMLButtonElement>(shell, '[data-act="close"]');
 
   let snapshot: Snapshot = EMPTY_SNAPSHOT;
@@ -66,6 +69,11 @@ export function mountToolbar(
     hint.innerHTML = isWebUrl(snapshot.url) ? ICON.lock : ICON.globe;
     if (!editing) input.value = displayUrl(snapshot.url);
     form.classList.toggle('dirty', editing && input.value.length > 0);
+    // The button is only there when a newer release actually exists for this
+    // platform, so a failed or skipped check leaves the bar exactly as it was.
+    const next = snapshot.update ?? EMPTY_UPDATE;
+    update.hidden = !next.available;
+    if (next.available) update.title = `Update to ${next.version}`;
   };
 
   const progress = (loading: boolean): void => {
@@ -106,6 +114,9 @@ export function mountToolbar(
         break;
       case 'close':
         controller.close();
+        break;
+      case 'update':
+        controller.installUpdate();
         break;
       default:
         break;

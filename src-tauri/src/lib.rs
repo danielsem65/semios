@@ -13,6 +13,7 @@ use percent_encoding::percent_decode_str;
 
 mod logging;
 mod smoke;
+mod update;
 
 const MAIN: &str = "main";
 const BRIDGE_SCHEME: &str = "semios";
@@ -46,6 +47,7 @@ struct Snapshot {
     can_go_back: bool,
     can_go_forward: bool,
     platform: String,
+    update: update::Update,
 }
 
 #[tauri::command]
@@ -71,9 +73,11 @@ pub fn run() {
     logging::write("INFO", &format!("run start platform={}", platform()));
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState(Mutex::new(Session::default())))
         .manage(SmokeState(Mutex::new(Smoke::default())))
+        .manage(update::UpdateState(Mutex::new(update::Update::default())))
         .invoke_handler(tauri::generate_handler![
             browser_state,
             browser_command,
@@ -147,6 +151,14 @@ pub fn run() {
                 }
             }
 
+            // After the window exists, and off the critical path. The verdict
+            // reaches the toolbar through the ordinary snapshot, so a slow or
+            // unreachable GitHub costs nothing but a quiet log line.
+            let checker = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                update::check(&checker).await;
+            });
+
             Ok(())
         });
 
@@ -203,6 +215,13 @@ fn record<R: Runtime>(app: &AppHandle<R>, url: &Url) {
 }
 
 fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
+    // Read before the session lock so only one mutex is ever held here.
+    let update = app
+        .state::<update::UpdateState>()
+        .0
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone();
     let state = app.state::<SessionState>();
     let session = state.0.lock().unwrap_or_else(|error| error.into_inner());
     // Reading the webview's URL is a main-pipe round trip, so it is desktop
@@ -223,10 +242,11 @@ fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
         can_go_back: session.index > 0,
         can_go_forward: session.index + 1 < session.history.len(),
         platform: platform().to_string(),
+        update,
     }
 }
 
-fn publish<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn publish<R: Runtime>(app: &AppHandle<R>) {
     // `emit` is not free of eval: on a webview target Tauri delivers the event
     // by running a dispatch script, so emitting on Android aborts the process
     // just as a direct eval would. The toolbar there reads state from the page
@@ -242,6 +262,19 @@ fn publish<R: Runtime>(app: &AppHandle<R>) {
     }
     #[cfg(mobile)]
     let _ = app;
+}
+
+/// Downloading an installer is async and can take a while, so it is never run on
+/// the caller's task. Shared by the IPC command and the injected overlay: the
+/// start page can invoke a command, a remote page can only navigate the bridge,
+/// and both have to reach the same place.
+fn install_update<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = update::install(&handle).await {
+            logging::write("ERROR", &format!("update install failed: {error}"));
+        }
+    });
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
@@ -276,6 +309,7 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
                 let _ = app.opener().open_url(target.to_string(), None::<String>);
             }
         }
+        "update" => install_update(app),
         "close" => {
             let _ = app.exit(0);
             return;
@@ -391,6 +425,7 @@ fn bridge<R: Runtime>(app: &AppHandle<R>, url: &Url) {
                 let _ = app.opener().open_url(target, None::<String>);
             }
         }
+        "update" => install_update(app),
         "probe" => {
             logging::write("INFO", &format!("smoke probe {}", arg.as_deref().unwrap_or("-")));
         }

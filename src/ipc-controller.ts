@@ -30,6 +30,9 @@ export function createIpcController(): Controller {
     close(): void {
       call('close');
     },
+    installUpdate(): void {
+      call('update');
+    },
     subscribe(receive: (snapshot: Snapshot) => void): void {
       // Android cannot receive pushed state: Tauri delivers events to a webview
       // by evaluating a dispatch script, and that eval aborts the process. Poll

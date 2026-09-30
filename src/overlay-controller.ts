@@ -53,6 +53,9 @@ export function createOverlayController(): Controller {
     close(): void {
       bridge('close');
     },
+    installUpdate(): void {
+      bridge('update');
+    },
     subscribe(receive: (snapshot: Snapshot) => void): void {
       receivers.add(receive);
       receive({ ...pushed, url: window.location.href });

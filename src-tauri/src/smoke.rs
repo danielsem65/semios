@@ -22,6 +22,21 @@ pub fn take_target() -> Option<String> {
         .filter(|target| !target.is_empty())
 }
 
+/// True in the CI builds, so anything that would add nondeterminism to a smoke
+/// run can opt out. The desktop harness hands the target over in the
+/// environment; the mobile one bakes it in, because there is no channel a
+/// release-signed APK can be handed one through.
+pub fn armed() -> bool {
+    #[cfg(desktop)]
+    {
+        std::env::var("SEMIOS_SMOKE_URL").is_ok()
+    }
+    #[cfg(mobile)]
+    {
+        option_env!("SEMIOS_SMOKE_URL").is_some()
+    }
+}
+
 #[cfg(desktop)]
 fn read_trigger() -> Option<String> {
     std::env::var("SEMIOS_SMOKE_URL").ok()
