@@ -1,9 +1,10 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
+#[cfg(desktop)]
+use tauri::Emitter;
 use tauri::{
-    webview::PageLoadEvent, AppHandle, Emitter, Manager, Runtime, Webview, WebviewUrl,
-    WebviewWindowBuilder,
+    webview::PageLoadEvent, AppHandle, Manager, Runtime, Webview, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
@@ -206,13 +207,21 @@ fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
 }
 
 fn publish<R: Runtime>(app: &AppHandle<R>) {
-    let state = snapshot(app);
-    let _ = app.emit("semios-state", &state);
+    // `emit` is not free of eval: on a webview target Tauri delivers the event
+    // by running a dispatch script, so emitting on Android aborts the process
+    // just as a direct eval would. The toolbar there reads state from the page
+    // itself, so mobile only needs the bookkeeping.
     #[cfg(desktop)]
-    if let Ok(json) = serde_json::to_string(&state) {
-        let script = String::from("window.__semios && window.__semios.update(") + &json + ")";
-        eval(app, &script);
+    {
+        let state = snapshot(app);
+        let _ = app.emit("semios-state", &state);
+        if let Ok(json) = serde_json::to_string(&state) {
+            let script = String::from("window.__semios && window.__semios.update(") + &json + ")";
+            eval(app, &script);
+        }
     }
+    #[cfg(mobile)]
+    let _ = app;
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
