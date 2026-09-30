@@ -29,22 +29,20 @@ adb logcat -c
 adb shell am force-stop "$PKG" || true
 
 # The app reads this to walk a remote page load and a reload once the start page
-# settles. A release-signed APK cannot be reached by run-as, so app-specific
-# external storage is the only channel a harness has; verify it took, otherwise
-# the navigation half of this test would quietly never run.
+# settles. A system property is the only channel that survives a release-signed
+# APK: no env vars are inherited, run-as is denied, and scoped storage refuses
+# even the app's own external directory. Verify it took, otherwise the
+# navigation half of this test would quietly never run.
 SMOKE_URL="https://example.com/"
-TRIGGER="/sdcard/Android/data/$PKG/files/semios-smoke.txt"
-adb shell "mkdir -p /sdcard/Android/data/$PKG/files" >/dev/null 2>&1 || true
-adb shell "echo $SMOKE_URL > $TRIGGER" >/dev/null 2>&1 || true
-TRIGGER_OK="$(adb shell "cat $TRIGGER" 2>/dev/null | tr -d '\r\n ')"
+PROP="semios.smoke_url"
+adb shell setprop "$PROP" "$SMOKE_URL" >/dev/null 2>&1 || true
+TRIGGER_OK="$(adb shell getprop "$PROP" 2>/dev/null | tr -d '\r\n ')"
 if [ "$TRIGGER_OK" != "$SMOKE_URL" ]; then
-  echo "RESULT: could not arm the navigation smoke trigger at $TRIGGER" | tee "$OUT/result.txt"
+  echo "RESULT: could not arm the navigation smoke trigger (got '$TRIGGER_OK')" | tee "$OUT/result.txt"
   exit 1
 fi
-# Never leave the trigger behind, including on the failure paths below. It is
-# claimed once per launch, but a stale file in external storage would quietly
-# re-arm the next local run of the app.
-trap 'adb shell "rm -f $TRIGGER" >/dev/null 2>&1 || true' EXIT
+# Never leave the trigger behind, including on the failure paths below.
+trap 'adb shell setprop semios.smoke_url "" >/dev/null 2>&1 || true' EXIT
 echo "navigation trigger armed: $TRIGGER_OK"
 
 echo "launching..."

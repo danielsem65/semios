@@ -27,42 +27,29 @@ fn read_trigger() -> Option<String> {
     std::env::var("SEMIOS_SMOKE_URL").ok()
 }
 
-/// A release-signed APK cannot be read back by `run-as`, so the emulator
-/// harness cannot hand us a file inside the app sandbox. App-specific external
-/// storage needs no runtime permission and is still writable by adb, which
-/// makes it the one channel that works without pulling in another plugin.
-///
-/// Every candidate is logged: this path differs across Android versions, and a
-/// trigger that silently fails looks exactly like a navigation test that was
-/// never wired up.
+/// Android gives a launched app no environment variables, a release-signed APK's
+/// own files are unreachable from the harness, and scoped storage denies even the
+/// app's own `Android/data` directory on current images. A system property is the
+/// one channel left: `adb shell setprop` needs no root for custom properties and
+/// bionic exports the getter to every process.
 #[cfg(mobile)]
 fn read_trigger() -> Option<String> {
-    use std::path::PathBuf;
+    use std::ffi::{c_char, c_int};
 
-    const PACKAGE: &str = "app.semios.browser";
-    const NAME: &str = "semios-smoke.txt";
-
-    let mut roots: Vec<PathBuf> = Vec::new();
-    match std::env::var("EXTERNAL_STORAGE") {
-        Ok(root) => roots.push(PathBuf::from(root)),
-        Err(_) => crate::logging::write("WARN", "smoke trigger: EXTERNAL_STORAGE is not set"),
+    extern "C" {
+        fn __system_property_get(name: *const c_char, value: *mut c_char) -> c_int;
     }
-    roots.push(PathBuf::from("/sdcard"));
-    roots.push(PathBuf::from("/storage/emulated/0"));
 
-    for root in roots {
-        let path = root.join("Android/data").join(PACKAGE).join("files").join(NAME);
-        match std::fs::read_to_string(&path) {
-            Ok(text) => {
-                crate::logging::write("INFO", &format!("smoke trigger found {}", path.display()));
-                return Some(text);
-            }
-            Err(error) => crate::logging::write(
-                "WARN",
-                &format!("smoke trigger miss {} ({error})", path.display()),
-            ),
-        }
+    let name = b"semios.smoke_url\0";
+    // PROP_VALUE_MAX, from <sys/system_properties.h>.
+    let mut value = vec![0 as c_char; 92];
+    let len = unsafe { __system_property_get(name.as_ptr() as *const c_char, value.as_mut_ptr()) };
+    if len <= 0 {
+        crate::logging::write("INFO", "smoke trigger: semios.smoke_url is not set");
+        return None;
     }
-    crate::logging::write("WARN", "smoke trigger not found on any candidate path");
-    None
+    let bytes = unsafe { std::slice::from_raw_parts(value.as_ptr() as *const u8, len as usize) };
+    let text = String::from_utf8_lossy(bytes).trim().to_string();
+    crate::logging::write("INFO", &format!("smoke trigger from property: {text}"));
+    Some(text)
 }
