@@ -28,13 +28,33 @@ fi
 adb logcat -c
 adb shell am force-stop "$PKG" || true
 
+# The app reads this to walk a remote page load and a reload once the start page
+# settles. A release-signed APK cannot be reached by run-as, so app-specific
+# external storage is the only channel a harness has; verify it took, otherwise
+# the navigation half of this test would quietly never run.
+SMOKE_URL="https://example.com/"
+TRIGGER="/sdcard/Android/data/$PKG/files/semios-smoke.txt"
+adb shell "mkdir -p /sdcard/Android/data/$PKG/files" >/dev/null 2>&1 || true
+adb shell "echo $SMOKE_URL > $TRIGGER" >/dev/null 2>&1 || true
+TRIGGER_OK="$(adb shell "cat $TRIGGER" 2>/dev/null | tr -d '\r\n ')"
+if [ "$TRIGGER_OK" != "$SMOKE_URL" ]; then
+  echo "RESULT: could not arm the navigation smoke trigger at $TRIGGER" | tee "$OUT/result.txt"
+  exit 1
+fi
+# Never leave the trigger behind, including on the failure paths below. It is
+# claimed once per launch, but a stale file in external storage would quietly
+# re-arm the next local run of the app.
+trap 'adb shell "rm -f $TRIGGER" >/dev/null 2>&1 || true' EXIT
+echo "navigation trigger armed: $TRIGGER_OK"
+
 echo "launching..."
 adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > "$OUT/launch.txt" 2>&1
 cat "$OUT/launch.txt"
 
 # The abort, when it happens, lands well after the window is up, so sample the
-# app's own log while it is still alive rather than only after the fact.
-for _ in $(seq 1 6); do
+# app's own log while it is still alive rather than only after the fact. The
+# window is long enough for the start page, a remote page, and a reload.
+for _ in $(seq 1 12); do
   sleep 5
   PID_NOW="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
   if [ -z "$PID_NOW" ]; then
@@ -68,7 +88,18 @@ adb logcat -d -v threadtime > "$OUT/logcat-full.txt" 2>&1
 adb exec-out screencap -p > "$OUT/screen.png" 2>/dev/null || true
 
 if [ -z "$PID" ]; then
-  echo "RESULT: app is not running after 30s (crashed at startup)" | tee -a "$OUT/result.txt"
+  echo "RESULT: app is not running (crashed during startup)" | tee -a "$OUT/result.txt"
+  exit 1
+fi
+
+# The trigger was armed and read, so the log has to show the whole walk. These
+# are the paths a bare startup never reaches, and the ones that used to abort.
+if ! grep -q 'overlay attached' "$OUT/logcat-full.txt"; then
+  echo "RESULT: toolbar never attached to the remote page" | tee -a "$OUT/result.txt"
+  exit 1
+fi
+if ! grep -q 'smoke complete: remote page loaded and reloaded' "$OUT/logcat-full.txt"; then
+  echo "RESULT: remote page did not survive a load and a reload" | tee -a "$OUT/result.txt"
   exit 1
 fi
 

@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Exe,
-  [int]$SettleSeconds = 25
+  [int]$SettleSeconds = 40,
+  [string]$SmokeUrl = 'https://example.com/'
 )
 
 # Windows had a build check but no runtime check, which is why a blank window
@@ -17,6 +18,9 @@ if (Test-Path -LiteralPath $logPath) {
 }
 
 Write-Host "launching $Exe"
+# The app reads this to walk a remote page load and a reload after the start
+# page settles. Both go through code that a bare startup never reaches.
+$env:SEMIOS_SMOKE_URL = $SmokeUrl
 $process = Start-Process -FilePath $Exe -PassThru
 Start-Sleep -Seconds $SettleSeconds
 $process.Refresh()
@@ -91,12 +95,18 @@ Write-Host $logText
 $problems = @()
 if ($crashed) { $problems += "process exited during startup (exit=$($process.ExitCode))" }
 if ($logText -match 'ERROR|PANIC') { $problems += 'log reported an error' }
-if ($logText -notmatch 'start toolbar mounted|overlay attached') {
-  $problems += 'toolbar never reported a successful mount'
+if ($logText -notmatch 'start toolbar mounted') {
+  $problems += 'start page never reported a successful mount'
+}
+if ($logText -notmatch 'overlay attached') {
+  $problems += 'toolbar never attached to the remote page'
+}
+if ($logText -notmatch 'smoke complete: remote page loaded and reloaded') {
+  $problems += 'remote page did not survive a load and a reload'
 }
 if ($problems.Count -gt 0) {
   Write-Host "FAILED: $($problems -join '; ')"
   exit 1
 }
 
-Write-Host 'PASSED: window alive and toolbar mounted'
+Write-Host 'PASSED: window alive, toolbar mounted, remote page loaded and reloaded'

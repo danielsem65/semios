@@ -15,16 +15,18 @@ export type Level = 'INFO' | 'WARN' | 'ERROR';
  */
 export function report(level: Level, message: string): void {
   const line = `[semios] ${level}: ${message}`;
+  // Always mirror to the console. On a remote page the injected script may have
+  // no bridge at all, and a line that only exists in the page's own console is
+  // a line that vanishes the moment the tab navigates.
+  console.warn(line);
   try {
     const invoke = internals()?.invoke;
     if (invoke) {
-      void invoke('browser_log', { level, message }).catch(() => console.warn(line));
-      return;
+      void invoke('browser_log', { level, message }).catch(() => {});
     }
   } catch {
-    // Fall through to the console.
+    // The console line above is the fallback.
   }
-  console.warn(line);
 }
 
 /**

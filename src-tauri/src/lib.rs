@@ -12,6 +12,7 @@ use url::Url;
 use percent_encoding::percent_decode_str;
 
 mod logging;
+mod smoke;
 
 const MAIN: &str = "main";
 const BRIDGE_SCHEME: &str = "semios";
@@ -26,6 +27,16 @@ struct Session {
 }
 
 struct SessionState(Mutex<Session>);
+
+/// How far the optional navigation smoke test has got. Zero everywhere except
+/// in CI, which is what keeps the release builds inert.
+#[derive(Default)]
+struct Smoke {
+    stage: u8,
+    target: Option<String>,
+}
+
+struct SmokeState(Mutex<Smoke>);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +73,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState(Mutex::new(Session::default())))
+        .manage(SmokeState(Mutex::new(Smoke::default())))
         .invoke_handler(tauri::generate_handler![
             browser_state,
             browser_command,
@@ -99,6 +111,7 @@ pub fn run() {
                         PageLoadEvent::Finished => {
                             logging::write("INFO", &format!("page load finished {url}"));
                             set_loading(&app, false);
+                            smoke_step(&app, &url);
                             publish(&app);
                         }
                     }
@@ -270,6 +283,45 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
         _ => {}
     }
     publish(app);
+}
+
+/// Walks CI through a remote page load and a reload, once the start page has
+/// settled. Every stage hangs off a finished page load, so without a trigger
+/// from the harness this never does anything at all.
+fn smoke_step<R: Runtime>(app: &AppHandle<R>, url: &str) {
+    let state = app.state::<SmokeState>();
+    let mut smoke = state.0.lock().unwrap_or_else(|error| error.into_inner());
+    if smoke.target.is_none() {
+        smoke.target = smoke::take_target();
+    }
+    let Some(target) = smoke.target.clone() else {
+        return;
+    };
+
+    match smoke.stage {
+        // The start page is up and its toolbar has mounted, so there is a window
+        // to send somewhere we do not own.
+        0 => {
+            smoke.stage = 1;
+            logging::write("INFO", &format!("smoke navigating to {target}"));
+            drop(smoke);
+            navigate(app, &target);
+        }
+        // A remote page finished loading, which means the toolbar had to attach
+        // to a document we did not build. Now reload it: desktop evals, mobile
+        // re-navigates, and neither path is covered by a plain startup.
+        1 if url == target => {
+            smoke.stage = 2;
+            logging::write("INFO", "smoke reloading the remote page");
+            drop(smoke);
+            dispatch(app, "reload", None);
+        }
+        2 if url == target => {
+            smoke.stage = 3;
+            logging::write("INFO", "smoke complete: remote page loaded and reloaded");
+        }
+        _ => {}
+    }
 }
 
 fn navigate<R: Runtime>(app: &AppHandle<R>, target: &str) {

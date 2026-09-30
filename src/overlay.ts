@@ -1,6 +1,7 @@
 import { mountToolbar } from './toolbar';
 import { createOverlayController } from './overlay-controller';
 import { describePage, report, watchRuntimeErrors } from './diagnostics';
+import { reserveBarSpace } from './inset';
 
 const HOST_ID = 'semios-overlay';
 const START_ID = 'start';
@@ -30,9 +31,12 @@ function attach(): void {
     return;
   }
   const host = createHost();
-  (document.body ?? document.documentElement).appendChild(host);
+  (document.body ?? document.documentElement).append(host);
   try {
     mountToolbar(host, createOverlayController(), true);
+    // The start page owns its own layout and reserves room for its bar, but a
+    // site we do not control knows nothing about ours, so we inset it for them.
+    reserveBarSpace(host);
     report('INFO', `overlay attached url=${location.href}`);
   } catch (error) {
     report('ERROR', `overlay mount failed: ${String(error)}`);
