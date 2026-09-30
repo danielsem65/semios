@@ -73,7 +73,6 @@ pub fn run() {
     logging::write("INFO", &format!("run start platform={}", platform()));
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState(Mutex::new(Session::default())))
         .manage(SmokeState(Mutex::new(Smoke::default())))

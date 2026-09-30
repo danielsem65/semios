@@ -18,7 +18,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_http::HttpExt;
+// The plugin crate re-exports reqwest, and depending on it rather than on
+// reqwest directly means the TLS backend, HTTP/2 and system proxy support are
+// the set the Tauri ecosystem settled on, on every platform we ship to. The
+// plugin itself is never registered: nothing here goes through the webview, so
+// the JavaScript side of it would be dead weight.
+use tauri_plugin_http::reqwest;
 
 use crate::logging;
 
@@ -71,7 +76,7 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
-    match fetch(app, &current).await {
+    match fetch(&current).await {
         Ok(update) => {
             if update.available {
                 logging::write("INFO", &format!("update available {}", update.version));
@@ -118,9 +123,9 @@ async fn install_platform<R: Runtime>(
     asset: &str,
     version: &str,
 ) -> Result<(), String> {
-    let response = download(app, asset).await?;
+    let bytes = download(asset).await?;
     let path = std::env::temp_dir().join(format!("semios-setup-{version}.exe"));
-    std::fs::write(&path, &response).map_err(|error| format!("could not save the installer: {error}"))?;
+    std::fs::write(&path, &bytes).map_err(|error| format!("could not save the installer: {error}"))?;
     logging::write("INFO", &format!("installer saved to {}", path.display()));
 
     // NSIS replaces the running install and asks the app to close, so step out
@@ -147,8 +152,8 @@ async fn install_platform<R: Runtime>(
     Ok(())
 }
 
-async fn fetch<R: Runtime>(app: &AppHandle<R>, current: &str) -> Result<Update, String> {
-    let body = get(app, RELEASES).await?;
+async fn fetch(current: &str) -> Result<Update, String> {
+    let body = get(RELEASES).await?;
     let release: serde_json::Value =
         serde_json::from_str(&body).map_err(|error| format!("unreadable release: {error}"))?;
 
@@ -181,11 +186,21 @@ async fn fetch<R: Runtime>(app: &AppHandle<R>, current: &str) -> Result<Update, 
     })
 }
 
-async fn get<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<String, String> {
-    let client = app.http();
-    let response = client
+/// Built per call rather than cached: this runs at most twice per launch, and a
+/// client kept alive for the life of the process would outlive its only purpose.
+fn client(timeout: Duration) -> Result<reqwest::Client, String> {
+    // `build` is fallible where `new` panics, and a browser must not die because
+    // a TLS backend refused to start.
+    reqwest::Client::builder()
+        .user_agent(AGENT)
+        .timeout(timeout)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+async fn get(url: &str) -> Result<String, String> {
+    let response = client(Duration::from_secs(20))?
         .get(url)
-        .header("User-Agent", AGENT)
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
@@ -198,11 +213,10 @@ async fn get<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<String, String
 }
 
 #[cfg(desktop)]
-async fn download<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<Vec<u8>, String> {
-    let client = app.http();
-    let response = client
+async fn download(url: &str) -> Result<Vec<u8>, String> {
+    // Generous: this is a whole installer over whatever connection the user has.
+    let response = client(Duration::from_secs(600))?
         .get(url)
-        .header("User-Agent", AGENT)
         .send()
         .await
         .map_err(|error| error.to_string())?;
@@ -210,7 +224,7 @@ async fn download<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<Vec<u8>, 
     if !status.is_success() {
         return Err(format!("download failed with {status}"));
     }
-    response.bytes().await.map_err(|error| error.to_string())
+    response.bytes().await.map(|bytes| bytes.to_vec()).map_err(|error| error.to_string())
 }
 
 /// Find the artifact that can actually be installed on this platform. A release
