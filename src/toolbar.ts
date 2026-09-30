@@ -51,7 +51,6 @@ export function mountToolbar(
   const back = pick<HTMLButtonElement>(shell, '[data-act="back"]');
   const forward = pick<HTMLButtonElement>(shell, '[data-act="forward"]');
   const reload = pick<HTMLButtonElement>(shell, '[data-act="reload"]');
-  const home = pick<HTMLButtonElement>(shell, '[data-act="home"]');
   const close = pick<HTMLButtonElement>(shell, '[data-act="close"]');
 
   let snapshot: Snapshot = EMPTY_SNAPSHOT;
