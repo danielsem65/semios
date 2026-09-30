@@ -86,10 +86,11 @@ pub fn run() {
                 })
                 .on_page_load(|window, payload| {
                     let app = window.app_handle().clone();
-                    let url = webview(&app)
-                        .and_then(|webview| webview.url().ok())
-                        .map(|url| url.to_string())
-                        .unwrap_or_else(|| "<unknown>".to_string());
+                    // The payload already carries the URL. Asking the webview for
+                    // it round-trips through wry's Android main pipe, which is torn
+                    // down around the first page commit, and that round trip is
+                    // what aborted the process on every single startup.
+                    let url = payload.url().to_string();
                     match payload.event() {
                         PageLoadEvent::Started => {
                             logging::write("INFO", &format!("page load started {url}"));
@@ -191,14 +192,20 @@ fn record<R: Runtime>(app: &AppHandle<R>, url: &Url) {
 fn snapshot<R: Runtime>(app: &AppHandle<R>) -> Snapshot {
     let state = app.state::<SessionState>();
     let session = state.0.lock().unwrap_or_else(|error| error.into_inner());
-    let url = webview(app)
+    // Reading the webview's URL is a main-pipe round trip, so it is desktop
+    // only. Mobile reports the URL it recorded while navigating, which stays
+    // correct because every navigation goes through the bridge.
+    #[cfg(desktop)]
+    let live = webview(app)
         .and_then(|webview| webview.url().ok())
-        .map(|url| url.to_string())
-        .or_else(|| session.history.get(session.index).cloned())
-        .unwrap_or_else(|| HOME_URL.to_string());
+        .map(|url| url.to_string());
+    #[cfg(mobile)]
+    let live: Option<String> = None;
 
     Snapshot {
-        url,
+        url: live
+            .or_else(|| session.history.get(session.index).cloned())
+            .unwrap_or_else(|| HOME_URL.to_string()),
         loading: session.loading,
         can_go_back: session.index > 0,
         can_go_forward: session.index + 1 < session.history.len(),
@@ -243,13 +250,9 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
             set_loading(app, true);
             #[cfg(desktop)]
             eval(app, "window.location.reload()");
-            // Re-navigating is the only reload available without eval, and it
-            // still has to clear loading if the current URL is unreadable.
+            // Re-navigating is the only reload available without eval.
             #[cfg(mobile)]
-            match webview(app).and_then(|webview| webview.url().ok()) {
-                Some(url) => navigate(app, url.as_str()),
-                None => set_loading(app, false),
-            }
+            navigate(app, &snapshot(app).url);
         }
         "stop" => {
             set_loading(app, false);
