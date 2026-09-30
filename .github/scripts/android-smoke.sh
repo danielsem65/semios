@@ -80,9 +80,10 @@ fi
 # are the paths a bare startup never reaches, and the ones that used to abort.
 # The toolbar cannot report in from a foreign origin and mobile has no eval, so
 # unlike desktop this cannot ask the page what it sees; it proves the remote
-# page survives a load and a reload, and that nothing was drawn blank.
-if ! grep -q 'smoke complete: remote page loaded and reloaded' "$OUT/logcat-full.txt"; then
-  echo "RESULT: remote page did not survive a load and a reload" | tee -a "$OUT/result.txt"
+# page survives a load, a reload, and a tab switch, and that nothing was drawn
+# blank.
+if ! grep -q 'smoke complete: remote page loaded and reloaded; second tab opened' "$OUT/logcat-full.txt"; then
+  echo "RESULT: remote page did not survive a load, a reload, and a second tab" | tee -a "$OUT/result.txt"
   exit 1
 fi
 
@@ -99,4 +100,4 @@ if [ -s "$OUT/screen.png" ]; then
   fi
 fi
 
-echo "RESULT: remote page survived a load and a reload (pid $PID)" | tee -a "$OUT/result.txt"
+echo "RESULT: remote page survived a load, a reload, and a second tab (pid $PID)" | tee -a "$OUT/result.txt"

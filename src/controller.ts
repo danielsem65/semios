@@ -7,6 +7,12 @@ export interface Update {
   checked: boolean;
 }
 
+export interface TabInfo {
+  id: number;
+  title: string;
+  url: string;
+}
+
 export interface Snapshot {
   url: string;
   loading: boolean;
@@ -14,6 +20,8 @@ export interface Snapshot {
   canGoForward: boolean;
   platform: string;
   update: Update;
+  tabs: TabInfo[];
+  activeTab: number;
 }
 
 export interface Controller {
@@ -23,6 +31,9 @@ export interface Controller {
   reload(): void;
   stop(): void;
   home(): void;
+  newTab(input?: string): void;
+  selectTab(id: number): void;
+  closeTab(id: number): void;
   close(): void;
   installUpdate(): void;
   subscribe(receiver: (snapshot: Snapshot) => void): void;
@@ -44,4 +55,8 @@ export const EMPTY_SNAPSHOT: Snapshot = {
   canGoForward: false,
   platform: '',
   update: EMPTY_UPDATE,
+  // No state yet. The toolbar hides the list rather than inventing tabs, and
+  // Android remote pages stay here permanently: they cannot receive a push.
+  tabs: [],
+  activeTab: 0,
 };

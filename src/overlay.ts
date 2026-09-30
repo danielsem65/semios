@@ -1,6 +1,7 @@
 import { mountToolbar } from './toolbar';
 import { createOverlayController } from './overlay-controller';
 import { describePage, report, watchRuntimeErrors } from './diagnostics';
+import { interceptNewWindows } from './newwindow';
 import { reserveBarSpace } from './inset';
 
 const HOST_ID = 'semios-overlay';
@@ -33,7 +34,16 @@ function attach(): void {
   const host = createHost();
   (document.body ?? document.documentElement).append(host);
   try {
-    mountToolbar(host, createOverlayController(), true);
+    // Installed before the toolbar so a link is never clickable in the gap.
+    interceptNewWindows();
+    const controller = createOverlayController();
+    mountToolbar(host, controller, {
+      collapsible: true,
+      menu: {
+        openInTab: (url) => controller.newTab(url),
+        reload: () => controller.reload(),
+      },
+    });
     // The start page owns its own layout and reserves room for its bar, but a
     // site we do not control knows nothing about ours, so we inset it for them.
     reserveBarSpace(host);

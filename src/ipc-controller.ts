@@ -27,6 +27,15 @@ export function createIpcController(): Controller {
     home(): void {
       call('home');
     },
+    newTab(input?: string): void {
+      call('newtab', input);
+    },
+    selectTab(id: number): void {
+      call('selecttab', String(id));
+    },
+    closeTab(id: number): void {
+      call('closetab', String(id));
+    },
     close(): void {
       call('close');
     },

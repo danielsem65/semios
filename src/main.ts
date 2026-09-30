@@ -65,7 +65,7 @@ function boot(): void {
   }
   try {
     buildStartPage();
-    mountToolbar(host, createIpcController(), false);
+    mountToolbar(host, createIpcController(), { collapsible: false });
     report('INFO', 'start toolbar mounted');
   } catch (error) {
     report('ERROR', `start boot failed: ${String(error)}`);

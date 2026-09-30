@@ -98,13 +98,25 @@ if ($logText -match 'ERROR|PANIC') { $problems += 'log reported an error' }
 if ($logText -notmatch 'start toolbar mounted') {
   $problems += 'start page never reported a successful mount'
 }
-if ($logText -notmatch 'smoke complete: remote page loaded and reloaded') {
-  $problems += 'remote page did not survive a load and a reload'
+if ($logText -notmatch 'smoke complete: remote page loaded and reloaded; second tab opened') {
+  $problems += 'remote page did not survive a load, a reload, and a second tab'
 }
 # The page is asked what it can see, and answers over the bridge. This is what
 # catches the toolbar covering the site instead of sitting above it.
 if ($logText -notmatch 'smoke probe bar=yes') {
   $problems += 'toolbar did not attach to the remote page'
+}
+if ($logText -notmatch 'smoke probe list=yes') {
+  $problems += 'the tab strip did not attach to the remote page'
+}
+# Reported by a second round trip so it is read after the toolbar has been
+# painted. The second tab was opened through the tab machinery rather than by a
+# plain navigation, so this only passes if a tab was really created.
+if ($logText -notmatch 'smoke tabs 2/') {
+  $problems += 'the second tab was not created'
+}
+if ($logText -match 'smoke tabs \d+/none') {
+  $problems += 'no tab was marked as the active one'
 }
 if ($logText -match 'smoke probe.*blocked=yes') {
   $problems += 'the toolbar is still swallowing clicks on the page'
@@ -117,4 +129,4 @@ if ($problems.Count -gt 0) {
   exit 1
 }
 
-Write-Host 'PASSED: remote page loaded, reloaded, toolbar attached, page still clickable'
+Write-Host 'PASSED: remote page loaded, reloaded, second tab opened, chrome attached, page still clickable'

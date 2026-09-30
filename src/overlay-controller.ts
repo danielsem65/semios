@@ -50,6 +50,16 @@ export function createOverlayController(): Controller {
       publish(true);
       window.location.href = HOME_URL;
     },
+    newTab(input?: string): void {
+      if (input) bridge('newtab', input);
+      else bridge('newtab');
+    },
+    selectTab(id: number): void {
+      bridge('selecttab', String(id));
+    },
+    closeTab(id: number): void {
+      bridge('closetab', String(id));
+    },
     close(): void {
       bridge('close');
     },

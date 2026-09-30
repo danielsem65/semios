@@ -37,14 +37,13 @@
   font-family: inherit;
 }
 
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 46px;
-  padding: 0 6px 0 4px;
+/* The chrome is the tab strip plus the bar as one block. It owns the surface
+   colour, the border and the hide-on-scroll transform together, so the strip
+   cannot slide out from under the bar and leave a seam. */
+.chrome {
+  position: relative;
+  display: block;
   padding-top: env(safe-area-inset-top, 0px);
-  box-sizing: content-box;
   background: var(--semios-bg);
   backdrop-filter: saturate(180%) blur(18px);
   -webkit-backdrop-filter: saturate(180%) blur(18px);
@@ -53,10 +52,110 @@
   transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms linear;
 }
 
-:host([hidden-bar]) .bar {
+:host([hidden-bar]) .chrome {
   transform: translateY(-100%);
   opacity: 0;
   pointer-events: none;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 4px 6px 0;
+}
+
+.tablist {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tablist::-webkit-scrollbar {
+  display: none;
+}
+
+/* A tab is a button without being one: it is draggable-looking, it holds text
+   plus a close affordance, and a real button element would drag the default
+   chrome styling in with it. */
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 200px;
+  min-width: 40px;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 3px 0 10px;
+  border-radius: 8px;
+  color: var(--semios-muted);
+  cursor: default;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab:hover {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--semios-field);
+  color: var(--semios-fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  all: unset;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  color: var(--semios-muted);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.tab[aria-selected="true"] .tab-close,
+.tab:hover .tab-close {
+  visibility: visible;
+}
+
+.tab-close:hover {
+  background: rgba(127, 127, 127, 0.28);
+}
+
+.tab-close svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 46px;
+  padding: 0 6px 0 4px;
 }
 
 .btn {
@@ -211,4 +310,102 @@
   width: 0;
   background: var(--semios-accent);
   transition: width 220ms ease, opacity 200ms linear;
+}
+
+/* Context menu. It lives in the shadow root so the page's own stylesheet
+   cannot position it, and it is the only part of the chrome allowed to sit
+   above everything else. */
+.menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  min-width: 188px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--semios-field);
+  border: 1px solid var(--semios-border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+.menu-item {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--semios-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--semios-accent);
+  color: #ffffff;
+}
+
+/* Page source viewer. Same reasoning as the menu: inside the shadow root,
+   rendered as text, and never parsed. */
+.source {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  background: var(--semios-field);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.source-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--semios-border);
+  background: var(--semios-bg);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.source-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--semios-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-close {
+  all: unset;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--semios-fg);
+  background: rgba(127, 127, 127, 0.16);
+  cursor: pointer;
+}
+
+.source-close:hover {
+  background: rgba(127, 127, 127, 0.3);
+}
+
+.source-body {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 12px 14px 24px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--semios-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
 }

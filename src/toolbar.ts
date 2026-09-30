@@ -1,5 +1,6 @@
 import css from './toolbar.css?inline';
-import { EMPTY_SNAPSHOT, EMPTY_UPDATE, type Controller, type Snapshot } from './controller';
+import { EMPTY_SNAPSHOT, EMPTY_UPDATE, type Controller, type Snapshot, type TabInfo } from './controller';
+import { mountContextMenu, type ContextMenuActions } from './menu';
 import { displayUrl, isWebUrl } from './url';
 
 const ICON = {
@@ -12,23 +13,36 @@ const ICON = {
   globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><path d="M12 4c2.8 3 2.8 13 0 16-2.8-3-2.8-13 0-16z"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>',
   update: '<svg viewBox="0 0 24 24"><path d="M12 4.5v10"/><path d="M7.8 10.8 12 15l4.2-4.2"/><path d="M5 19.5h14"/></svg>',
+  add: '<svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>',
 };
 
 const MARKUP = `
-<div class="progress"><i></i></div>
-<div class="bar">
-  <button class="btn" data-act="back" title="Back (Alt+Left)" aria-label="Back">${ICON.back}</button>
-  <button class="btn" data-act="forward" title="Forward (Alt+Right)" aria-label="Forward">${ICON.forward}</button>
-  <button class="btn" data-act="reload" title="Reload (Ctrl+R)" aria-label="Reload">${ICON.reload}</button>
-  <button class="btn" data-act="home" title="Home" aria-label="Home">${ICON.home}</button>
-  <button class="btn update" data-act="update" title="Update available" aria-label="Update available" hidden>${ICON.update}</button>
-  <form class="field" autocomplete="off">
-    <span class="hint">${ICON.lock}</span>
-    <input type="text" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Search or enter address" aria-label="Address and search bar" />
-    <button class="clear" type="button" title="Clear" aria-label="Clear">${ICON.close}</button>
-  </form>
-  <button class="btn" data-act="close" title="Close window" aria-label="Close window">${ICON.close}</button>
+<div class="chrome">
+  <div class="progress"><i></i></div>
+  <div class="tabs">
+    <div class="tablist" role="tablist"></div>
+    <button class="btn add" data-act="newtab" title="New tab (Ctrl+T)" aria-label="New tab">${ICON.add}</button>
+  </div>
+  <div class="bar">
+    <button class="btn" data-act="back" title="Back (Alt+Left)" aria-label="Back">${ICON.back}</button>
+    <button class="btn" data-act="forward" title="Forward (Alt+Right)" aria-label="Forward">${ICON.forward}</button>
+    <button class="btn" data-act="reload" title="Reload (Ctrl+R)" aria-label="Reload">${ICON.reload}</button>
+    <button class="btn" data-act="home" title="Home" aria-label="Home">${ICON.home}</button>
+    <button class="btn update" data-act="update" title="Update available" aria-label="Update available" hidden>${ICON.update}</button>
+    <form class="field" autocomplete="off">
+      <span class="hint">${ICON.lock}</span>
+      <input type="text" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Search or enter address" aria-label="Address and search bar" />
+      <button class="clear" type="button" title="Clear" aria-label="Clear">${ICON.close}</button>
+    </form>
+    <button class="btn" data-act="close" title="Close window" aria-label="Close window">${ICON.close}</button>
+  </div>
 </div>`;
+
+export interface ToolbarOptions {
+  /** Hides the chrome on scroll down, and only on pages we do not own. */
+  collapsible: boolean;
+  menu?: ContextMenuActions;
+}
 
 const isDesktop = (platform: string) =>
   platform === 'windows' || platform === 'macos' || platform === 'linux';
@@ -36,15 +50,15 @@ const isDesktop = (platform: string) =>
 export function mountToolbar(
   host: HTMLElement,
   controller: Controller,
-  collapsible: boolean,
-): void {
+  options: ToolbarOptions,
+): ShadowRoot {
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
   const shell = document.createElement('div');
   shell.innerHTML = MARKUP;
   root.append(shell);
   applyStyles(root, css);
 
-  const bar = pick<HTMLElement>(shell, '.bar');
+  const list = pick<HTMLElement>(shell, '.tablist');
   const form = pick<HTMLFormElement>(shell, '.field');
   const input = pick<HTMLInputElement>(shell, 'input');
   const hint = pick<HTMLElement>(shell, '.hint');
@@ -59,6 +73,30 @@ export function mountToolbar(
   let snapshot: Snapshot = EMPTY_SNAPSHOT;
   let editing = false;
 
+  const makeTab = (tab: TabInfo): HTMLElement => {
+    const node = document.createElement('div');
+    node.className = 'tab';
+    node.dataset.act = 'selecttab';
+    node.dataset.id = String(tab.id);
+    node.setAttribute('role', 'tab');
+    const selected = tab.id === snapshot.activeTab;
+    node.setAttribute('aria-selected', selected ? 'true' : 'false');
+    node.title = tab.url || tab.title;
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+    label.textContent = tab.title || 'New tab';
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'tab-close';
+    x.dataset.act = 'closetab';
+    x.dataset.id = String(tab.id);
+    x.title = 'Close tab';
+    x.setAttribute('aria-label', `Close ${tab.title || 'tab'}`);
+    x.innerHTML = ICON.close;
+    node.append(label, x);
+    return node;
+  };
+
   const paint = (): void => {
     back.toggleAttribute('disabled', !snapshot.canGoBack);
     forward.toggleAttribute('disabled', !snapshot.canGoForward);
@@ -69,6 +107,9 @@ export function mountToolbar(
     hint.innerHTML = isWebUrl(snapshot.url) ? ICON.lock : ICON.globe;
     if (!editing) input.value = displayUrl(snapshot.url);
     form.classList.toggle('dirty', editing && input.value.length > 0);
+    // Rebuilt rather than diffed. The list is a handful of short strings, and a
+    // reconcile path here would be more code than the repaint it replaced.
+    list.replaceChildren(...(snapshot.tabs ?? []).map(makeTab));
     // The button is only there when a newer release actually exists for this
     // platform, so a failed or skipped check leaves the bar exactly as it was.
     const next = snapshot.update ?? EMPTY_UPDATE;
@@ -94,8 +135,9 @@ export function mountToolbar(
     }, 260);
   };
 
-  bar.addEventListener('click', (event) => {
-    const target = (event.target as Element | null)?.closest<HTMLButtonElement>('[data-act]');
+  shell.addEventListener('click', (event) => {
+    const target = (event.target as Element | null)?.closest<HTMLElement>('[data-act]');
+    const id = Number(target?.dataset.id);
     switch (target?.dataset.act) {
       case 'back':
         controller.back();
@@ -111,6 +153,17 @@ export function mountToolbar(
         break;
       case 'stop':
         controller.stop();
+        break;
+      case 'newtab':
+        controller.newTab();
+        break;
+      case 'selecttab':
+        // A tab body is not a button, so there is no id when the click missed
+        // one; treat that as a no-op rather than selecting tab NaN.
+        if (Number.isFinite(id)) controller.selectTab(id);
+        break;
+      case 'closetab':
+        if (Number.isFinite(id)) controller.closeTab(id);
         break;
       case 'close':
         controller.close();
@@ -162,6 +215,7 @@ export function mountToolbar(
       if (event.defaultPrevented) return;
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
+      const open = (snapshot.tabs ?? []).length;
 
       if (mod && key === 'l') {
         event.preventDefault();
@@ -170,9 +224,19 @@ export function mountToolbar(
       } else if ((mod && key === 'r') || event.key === 'F5') {
         event.preventDefault();
         controller.reload();
-      } else if (mod && key === 'w' && isDesktop(snapshot.platform)) {
+      } else if (mod && key === 't') {
         event.preventDefault();
-        controller.close();
+        controller.newTab();
+      } else if (mod && key === 'w') {
+        // With tabs open, Ctrl+W closes the tab. With only one, it closes the
+        // window, because on desktop that is what the user is asking for.
+        if (open > 1) {
+          event.preventDefault();
+          controller.closeTab(snapshot.activeTab);
+        } else if (isDesktop(snapshot.platform)) {
+          event.preventDefault();
+          controller.close();
+        }
       } else if (event.altKey && event.key === 'ArrowLeft' && snapshot.canGoBack) {
         event.preventDefault();
         controller.back();
@@ -187,7 +251,7 @@ export function mountToolbar(
     true,
   );
 
-  if (collapsible) {
+  if (options.collapsible) {
     let last = window.scrollY;
     window.addEventListener(
       'scroll',
@@ -210,7 +274,9 @@ export function mountToolbar(
     if (wasLoading !== next.loading) progress(next.loading);
   });
 
+  if (options.menu) mountContextMenu(root, options.menu);
   paint();
+  return root;
 }
 
 function pick<T extends Element>(scope: ParentNode, selector: string): T {
