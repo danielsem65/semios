@@ -46,7 +46,7 @@ async fn browser_command(app: AppHandle<tauri::Wry>, action: String, arg: Option
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState(Mutex::new(Session::default())))
         .invoke_handler(tauri::generate_handler![browser_state, browser_command])
@@ -54,11 +54,9 @@ pub fn run() {
             let handle = app.handle().clone();
             let nav = handle.clone();
 
-            WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into()))
+            #[allow(unused_mut)]
+            let mut builder = WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into()))
                 .title("Semios")
-                .inner_size(1280.0, 840.0)
-                .min_inner_size(360.0, 480.0)
-                .resizable(true)
                 .initialization_script(OVERLAY)
                 .on_navigation(move |url| {
                     if url.scheme() == BRIDGE_SCHEME {
@@ -77,13 +75,33 @@ pub fn run() {
                             publish(&app);
                         }
                     }
-                })
-                .build()?;
+                });
+
+            // Sizing and resizing are desktop only. Android and iOS own their layout,
+            // and asking for a 1280x840 window on a phone is not a valid request.
+            #[cfg(desktop)]
+            {
+                builder = builder
+                    .inner_size(1280.0, 840.0)
+                    .min_inner_size(360.0, 480.0)
+                    .resizable(true);
+            }
+
+            if let Err(error) = builder.build() {
+                // A window without the toolbar beats a process that cannot start at all.
+                eprintln!("semios: window build failed ({error}), retrying without extras");
+                if handle.get_webview_window(MAIN).is_none() {
+                    WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into())).build()?;
+                }
+            }
 
             Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("semios: failed to start");
+        });
+
+    if let Err(error) = app.run(tauri::generate_context!()) {
+        // Never panic: on Android a panic here kills the process behind the splash screen.
+        eprintln!("semios: run failed: {error}");
+    }
 }
 
 fn webview<R: Runtime>(app: &AppHandle<R>) -> Option<Webview<R>> {
