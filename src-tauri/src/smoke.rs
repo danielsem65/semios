@@ -45,7 +45,7 @@ fn read_trigger() -> Option<String> {
     let mut roots: Vec<PathBuf> = Vec::new();
     match std::env::var("EXTERNAL_STORAGE") {
         Ok(root) => roots.push(PathBuf::from(root)),
-        Err(_) => logging::write("WARN", "smoke trigger: EXTERNAL_STORAGE is not set"),
+        Err(_) => crate::logging::write("WARN", "smoke trigger: EXTERNAL_STORAGE is not set"),
     }
     roots.push(PathBuf::from("/sdcard"));
     roots.push(PathBuf::from("/storage/emulated/0"));
@@ -54,15 +54,15 @@ fn read_trigger() -> Option<String> {
         let path = root.join("Android/data").join(PACKAGE).join("files").join(NAME);
         match std::fs::read_to_string(&path) {
             Ok(text) => {
-                logging::write("INFO", &format!("smoke trigger found {}", path.display()));
+                crate::logging::write("INFO", &format!("smoke trigger found {}", path.display()));
                 return Some(text);
             }
-            Err(error) => logging::write(
+            Err(error) => crate::logging::write(
                 "WARN",
                 &format!("smoke trigger miss {} ({error})", path.display()),
             ),
         }
     }
-    logging::write("WARN", "smoke trigger not found on any candidate path");
+    crate::logging::write("WARN", "smoke trigger not found on any candidate path");
     None
 }
