@@ -27,29 +27,17 @@ fn read_trigger() -> Option<String> {
     std::env::var("SEMIOS_SMOKE_URL").ok()
 }
 
-/// Android gives a launched app no environment variables, a release-signed APK's
-/// own files are unreachable from the harness, and scoped storage denies even the
-/// app's own `Android/data` directory on current images. A system property is the
-/// one channel left: `adb shell setprop` needs no root for custom properties and
-/// bionic exports the getter to every process.
+/// Android has no environment channel a harness can reach: a launched app
+/// inherits nothing from the shell, `run-as` is refused on a release-signed APK,
+/// scoped storage denies even the app's own `Android/data` directory, and
+/// `adb shell setprop` is refused for custom properties. So resolve the target
+/// when the APK is compiled instead. `option_env!` is fixed up by rustc, which
+/// keeps the release-signed, minified artifact intact and needs no permission at
+/// runtime. Only the smoke workflow exports the variable, so shipped APKs have
+/// no trigger baked in and this stays inert.
 #[cfg(mobile)]
 fn read_trigger() -> Option<String> {
-    use std::ffi::{c_char, c_int};
-
-    extern "C" {
-        fn __system_property_get(name: *const c_char, value: *mut c_char) -> c_int;
-    }
-
-    let name = b"semios.smoke_url\0";
-    // PROP_VALUE_MAX, from <sys/system_properties.h>.
-    let mut value = vec![0 as c_char; 92];
-    let len = unsafe { __system_property_get(name.as_ptr() as *const c_char, value.as_mut_ptr()) };
-    if len <= 0 {
-        crate::logging::write("INFO", "smoke trigger: semios.smoke_url is not set");
-        return None;
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(value.as_ptr() as *const u8, len as usize) };
-    let text = String::from_utf8_lossy(bytes).trim().to_string();
-    crate::logging::write("INFO", &format!("smoke trigger from property: {text}"));
-    Some(text)
+    let target = option_env!("SEMIOS_SMOKE_URL")?;
+    crate::logging::write("INFO", &format!("smoke trigger baked into this build: {target}"));
+    Some(target.to_string())
 }

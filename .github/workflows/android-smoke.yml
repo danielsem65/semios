@@ -74,7 +74,13 @@ jobs:
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
 
       - name: Build signed release APK
+        # Baked into the binary by rustc so the app can walk a remote page load
+        # and a reload without any runtime permission or harness channel. The
+        # release build in android.yml never sets this, so shipped APKs are
+        # unaffected.
         run: npm run tauri android build -- --apk
+        env:
+          SEMIOS_SMOKE_URL: https://example.com/
 
       - name: Verify APK signature
         run: |

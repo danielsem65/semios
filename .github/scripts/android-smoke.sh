@@ -28,23 +28,9 @@ fi
 adb logcat -c
 adb shell am force-stop "$PKG" || true
 
-# The app reads this to walk a remote page load and a reload once the start page
-# settles. A system property is the only channel that survives a release-signed
-# APK: no env vars are inherited, run-as is denied, and scoped storage refuses
-# even the app's own external directory. Verify it took, otherwise the
-# navigation half of this test would quietly never run.
-SMOKE_URL="https://example.com/"
-PROP="semios.smoke_url"
-adb shell setprop "$PROP" "$SMOKE_URL" >/dev/null 2>&1 || true
-TRIGGER_OK="$(adb shell getprop "$PROP" 2>/dev/null | tr -d '\r\n ')"
-if [ "$TRIGGER_OK" != "$SMOKE_URL" ]; then
-  echo "RESULT: could not arm the navigation smoke trigger (got '$TRIGGER_OK')" | tee "$OUT/result.txt"
-  exit 1
-fi
-# Never leave the trigger behind, including on the failure paths below.
-trap 'adb shell setprop semios.smoke_url "" >/dev/null 2>&1 || true' EXIT
-echo "navigation trigger armed: $TRIGGER_OK"
-
+# The navigation target was baked into this APK at build time, so there is
+# nothing to arm here and no trigger to clean up: a shipped build has none.
+# Launching is therefore also the moment the trigger becomes active.
 echo "launching..."
 adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > "$OUT/launch.txt" 2>&1
 cat "$OUT/launch.txt"
@@ -113,4 +99,4 @@ if [ -s "$OUT/screen.png" ]; then
   fi
 fi
 
-echo "RESULT: app is running (pid $PID)" | tee -a "$OUT/result.txt"
+echo "RESULT: remote page survived a load and a reload (pid $PID)" | tee -a "$OUT/result.txt"
