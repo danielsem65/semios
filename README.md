@@ -9,8 +9,8 @@ JavaScript framework, no runtime dependency downloads.
 
 | Platform | State |
 | --- | --- |
-| Windows | Building in CI |
-| Android | Building in CI |
+| Windows | Building on every push (NSIS installer) |
+| Android | Building on every push (unsigned APK) |
 | iOS | Planned |
 | macOS | Planned |
 
