@@ -392,7 +392,7 @@ fn bridge<R: Runtime>(app: &AppHandle<R>, url: &Url) {
             }
         }
         "probe" => {
-            logging::write("INFO", &format!("smoke probe {}", arg.unwrap_or("-")));
+            logging::write("INFO", &format!("smoke probe {}", arg.as_deref().unwrap_or("-")));
         }
         _ => {}
     }
