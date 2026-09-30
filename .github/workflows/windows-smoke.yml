@@ -1,0 +1,58 @@
+name: Windows Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Launch and inspect
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate icons
+        run: npm run tauri icon app-icon.png
+
+      - name: Build
+        run: npm run tauri build -- --no-bundle
+
+      - name: Run smoke test
+        shell: pwsh
+        run: |
+          .\.github\scripts\windows-smoke.ps1 `
+            -Exe src-tauri\target\release\semios.exe `
+            -SettleSeconds 25
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-smoke-diagnostics
+          path: ${{ runner.temp }}/windows-smoke
+          if-no-files-found: warn

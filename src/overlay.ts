@@ -1,5 +1,6 @@
 import { mountToolbar } from './toolbar';
 import { createOverlayController } from './overlay-controller';
+import { describePage, report, watchRuntimeErrors } from './diagnostics';
 
 const HOST_ID = 'semios-overlay';
 const START_ID = 'start';
@@ -20,13 +21,28 @@ function createHost(): HTMLElement {
 }
 
 function attach(): void {
-  if (document.getElementById(HOST_ID) || document.getElementById(START_ID)) return;
+  if (document.getElementById(HOST_ID)) {
+    report('WARN', 'overlay attach skipped: host already present');
+    return;
+  }
+  if (document.getElementById(START_ID)) {
+    report('INFO', 'overlay attach skipped: start page owns its own toolbar');
+    return;
+  }
   const host = createHost();
   (document.body ?? document.documentElement).appendChild(host);
-  mountToolbar(host, createOverlayController(), true);
+  try {
+    mountToolbar(host, createOverlayController(), true);
+    report('INFO', `overlay attached url=${location.href}`);
+  } catch (error) {
+    report('ERROR', `overlay mount failed: ${String(error)}`);
+    host.remove();
+  }
 }
 
 export function start(): void {
+  watchRuntimeErrors();
+  describePage('overlay init');
   if (document.body) {
     attach();
     return;

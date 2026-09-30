@@ -10,6 +10,8 @@ use url::Url;
 
 use percent_encoding::percent_decode_str;
 
+mod logging;
+
 const MAIN: &str = "main";
 const BRIDGE_SCHEME: &str = "semios";
 const HOME_URL: &str = "https://duckduckgo.com/";
@@ -44,12 +46,26 @@ async fn browser_command(app: AppHandle<tauri::Wry>, action: String, arg: Option
     dispatch(&app, &action, arg.as_deref());
 }
 
+/// Diagnostics sink for the injected script and the start page. A blank window
+/// with no console is otherwise impossible to explain after the fact.
+#[tauri::command]
+async fn browser_log(level: String, message: String) {
+    logging::write(&level, &message);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    logging::init();
+    logging::write("INFO", &format!("run start platform={}", platform()));
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(SessionState(Mutex::new(Session::default())))
-        .invoke_handler(tauri::generate_handler![browser_state, browser_command])
+        .invoke_handler(tauri::generate_handler![
+            browser_state,
+            browser_command,
+            browser_log
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let nav = handle.clone();
@@ -59,6 +75,7 @@ pub fn run() {
                 .title("Semios")
                 .initialization_script(OVERLAY)
                 .on_navigation(move |url| {
+                    logging::write("INFO", &format!("navigation {}", url));
                     if url.scheme() == BRIDGE_SCHEME {
                         bridge(&nav, url);
                         return false;
@@ -68,9 +85,17 @@ pub fn run() {
                 })
                 .on_page_load(|window, payload| {
                     let app = window.app_handle().clone();
+                    let url = webview(&app)
+                        .and_then(|webview| webview.url().ok())
+                        .map(|url| url.to_string())
+                        .unwrap_or_else(|| "<unknown>".to_string());
                     match payload.event() {
-                        PageLoadEvent::Started => set_loading(&app, true),
+                        PageLoadEvent::Started => {
+                            logging::write("INFO", &format!("page load started {url}"));
+                            set_loading(&app, true)
+                        }
                         PageLoadEvent::Finished => {
+                            logging::write("INFO", &format!("page load finished {url}"));
                             set_loading(&app, false);
                             publish(&app);
                         }
@@ -87,11 +112,23 @@ pub fn run() {
                     .resizable(true);
             }
 
-            if let Err(error) = builder.build() {
-                // A window without the toolbar beats a process that cannot start at all.
-                eprintln!("semios: window build failed ({error}), retrying without extras");
-                if handle.get_webview_window(MAIN).is_none() {
-                    WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into())).build()?;
+            match builder.build() {
+                Ok(_) => logging::write("INFO", "window built"),
+                Err(error) => {
+                    // A window without the toolbar beats a process that cannot start at all.
+                    logging::write("ERROR", &format!("window build failed ({error})"));
+                    eprintln!("semios: window build failed ({error}), retrying without extras");
+                    if handle.get_webview_window(MAIN).is_none() {
+                        let fallback =
+                            WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into()));
+                        match fallback.build() {
+                            Ok(_) => logging::write("WARN", "fallback window built without toolbar"),
+                            Err(fallback_error) => logging::write(
+                                "ERROR",
+                                &format!("fallback window build failed ({fallback_error})"),
+                            ),
+                        }
+                    }
                 }
             }
 
@@ -100,7 +137,10 @@ pub fn run() {
 
     if let Err(error) = app.run(tauri::generate_context!()) {
         // Never panic: on Android a panic here kills the process behind the splash screen.
+        logging::write("ERROR", &format!("run failed: {error}"));
         eprintln!("semios: run failed: {error}");
+    } else {
+        logging::write("INFO", "run finished");
     }
 }
 
@@ -184,6 +224,7 @@ fn push_to_webview<R: Runtime>(app: &AppHandle<R>, script: &str) {
 }
 
 fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
+    logging::write("INFO", &format!("command {action} arg={}", arg.unwrap_or("-")));
     match action {
         "go" => {
             if let Some(target) = arg {
@@ -221,8 +262,11 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: &str, arg: Option<&str>) {
 
 fn navigate<R: Runtime>(app: &AppHandle<R>, target: &str) {
     let Ok(url) = Url::parse(target) else {
+        logging::write("WARN", &format!("navigate rejected unparsable target {target}"));
         return;
     };
+
+    logging::write("INFO", &format!("navigate to {url}"));
 
     if url.scheme() == "http" || url.scheme() == "https" {
         if let Some(webview) = webview(app) {
