@@ -67,6 +67,19 @@ adb logcat -d -v threadtime > "$OUT/logcat-full.txt" 2>&1
 
 adb exec-out screencap -p > "$OUT/screen.png" 2>/dev/null || true
 
+# A live process is not a working browser: the app survived startup while
+# rendering nothing at all. Count distinct colours on a coarse grid so a blank
+# window fails instead of passing on a PID alone. A blank start page measures
+# around 15; a rendered one is in the hundreds.
+if [ -s "$OUT/screen.png" ]; then
+  COLORS="$(python3 "$OUT/count-colors.py" "$OUT/screen.png" 2>/dev/null || echo 0)"
+  echo "distinct colours: $COLORS" | tee -a "$OUT/result.txt"
+  if [ "$COLORS" -lt 40 ] 2>/dev/null; then
+    echo "RESULT: app is alive but the window is blank ($COLORS colours)" | tee -a "$OUT/result.txt"
+    exit 1
+  fi
+fi
+
 if [ -z "$PID" ]; then
   echo "RESULT: app is not running after 30s (crashed at startup)" | tee -a "$OUT/result.txt"
   exit 1

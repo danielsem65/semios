@@ -69,9 +69,6 @@ fn resolve_path() -> Option<PathBuf> {
 }
 
 pub fn write(level: &str, message: &str) {
-    let Some(path) = LOG_PATH.get().and_then(|slot| slot.clone()) else {
-        return;
-    };
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|since| since.as_millis())
@@ -80,5 +77,11 @@ pub fn write(level: &str, message: &str) {
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.write_all(line.as_bytes());
         let _ = file.flush();
+    }
+    // On Android a release-signed app cannot hand its log file to a test
+    // harness, so stderr is the only channel that reaches logcat. Mirror
+    // everything there and let the smoke test assert on it.
+    if cfg!(target_os = "android") {
+        eprintln!("semios {level}: {message}");
     }
 }
