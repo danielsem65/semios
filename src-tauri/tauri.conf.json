@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Semios",
+  "version": "0.1.0",
+  "identifier": "app.semios.browser",
+  "build": {
+    "beforeDevCommand": "npm run build:inject && vite",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "copyright": "Copyright (c) 2026 danielsem65",
+    "shortDescription": "The lightest, fastest web browser",
+    "longDescription": "Semios is a lightweight web browser built with Tauri 2, available for Windows, Android, and more.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

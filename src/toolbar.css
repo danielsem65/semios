@@ -1,0 +1,198 @@
+:host {
+  all: initial;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
+  display: block;
+  color-scheme: light dark;
+  --semios-bg: rgba(246, 247, 249, 0.86);
+  --semios-field: #ffffff;
+  --semios-fg: #1b1d21;
+  --semios-muted: #6b7280;
+  --semios-border: rgba(0, 0, 0, 0.1);
+  --semios-accent: #2f6df6;
+  --semios-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --semios-bg: rgba(24, 25, 28, 0.88);
+    --semios-field: #2b2d33;
+    --semios-fg: #eceef1;
+    --semios-muted: #9aa1ab;
+    --semios-border: rgba(255, 255, 255, 0.1);
+    --semios-accent: #6f9bff;
+    --semios-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 46px;
+  padding: 0 6px 0 4px;
+  padding-top: env(safe-area-inset-top, 0px);
+  box-sizing: content-box;
+  background: var(--semios-bg);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--semios-border);
+  box-shadow: var(--semios-shadow);
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 180ms linear;
+}
+
+:host([hidden-bar]) .bar {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn {
+  all: unset;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--semios-fg);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.btn:active {
+  background: rgba(127, 127, 127, 0.28);
+}
+
+.btn[disabled] {
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.btn[hidden] {
+  display: none;
+}
+
+.btn svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 4px 0 11px;
+  background: var(--semios-field);
+  border: 1px solid var(--semios-border);
+  border-radius: 17px;
+  transition: border-color 120ms linear, box-shadow 120ms linear;
+}
+
+.field:focus-within {
+  border-color: var(--semios-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--semios-accent) 24%, transparent);
+}
+
+.field .hint {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--semios-muted);
+}
+
+.field .hint svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.field input {
+  all: unset;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--semios-fg);
+  background: transparent;
+}
+
+.field input::placeholder {
+  color: var(--semios-muted);
+}
+
+.field .clear {
+  all: unset;
+  display: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  color: var(--semios-muted);
+  cursor: pointer;
+}
+
+.field.dirty .clear {
+  display: grid;
+}
+
+.field .clear:hover {
+  background: rgba(127, 127, 127, 0.2);
+}
+
+.field .clear svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--semios-accent);
+  transition: width 220ms ease, opacity 200ms linear;
+}

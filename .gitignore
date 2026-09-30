@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+src-tauri/target
+src-tauri/gen
+src-tauri/overlay
+src-tauri/icons
+
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+.vscode/*
+!.vscode/extensions.json
+.idea
