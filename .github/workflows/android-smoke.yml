@@ -85,7 +85,7 @@ jobs:
           profile: pixel_6
           ram-size: 4096M
           disable-animations: true
-          script: .github/scripts/android-smoke.sh
+          script: bash .github/scripts/android-smoke.sh
 
       - name: Upload diagnostics
         if: always()
