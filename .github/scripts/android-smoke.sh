@@ -31,8 +31,19 @@ adb shell am force-stop "$PKG" || true
 echo "launching..."
 adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > "$OUT/launch.txt" 2>&1
 cat "$OUT/launch.txt"
-sleep 30
 
+# The abort, when it happens, lands well after the window is up, so sample the
+# app's own log while it is still alive rather than only after the fact.
+for _ in $(seq 1 6); do
+  sleep 5
+  PID_NOW="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
+  if [ -z "$PID_NOW" ]; then
+    break
+  fi
+  adb shell run-as "$PKG" cat cache/semios.log > "$OUT/app-log.txt" 2>/dev/null || true
+done
+
+sleep 5
 PID="$(adb shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
 echo "pid: '$PID'" | tee -a "$OUT/result.txt"
 
@@ -41,6 +52,9 @@ adb shell dumpsys window > "$OUT/window.txt" 2>&1
 adb logcat -d -v threadtime > "$OUT/logcat-full.txt" 2>&1
 
 {
+  echo "=== app log (sampled while alive) ==="
+  cat "$OUT/app-log.txt" 2>/dev/null || echo "(unavailable: release-signed app, run-as denied)"
+  echo
   echo "=== semios lines ==="
   grep -iE "semios" "$OUT/logcat-full.txt" | tail -80
   echo

@@ -21,6 +21,13 @@ pub fn init() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         write("PANIC", &info.to_string());
+        // Android aborts inside wry, where the file and line alone do not say
+        // which of our calls reached the main pipe. The frames do, and a
+        // release-signed app cannot read its own log file from a test harness,
+        // so the backtrace also goes to stderr where logcat collects it.
+        let trace = format!("{}", std::backtrace::Backtrace::force_capture());
+        write("PANIC", &trace);
+        eprintln!("semios panic backtrace:\n{trace}");
         previous(info);
     }));
 }
